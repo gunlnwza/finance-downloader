@@ -38,7 +38,8 @@ class AlphaVantage(DataProvider):
     def _normalize(self, res) -> pd.DataFrame:
         df = pd.read_csv(StringIO(res.text), index_col="timestamp", parse_dates=True)
         df = df.sort_index()
-        df["volume"] = 0
+        if "volume" not in df.columns:
+            df["volume"] = 0
         return df
 
     def get(self, symbol, time_frame, time_range):
@@ -95,6 +96,8 @@ class TwelveData(DataProvider):
 
     def _normalize(self, res):
         df = pd.read_csv(StringIO(res.text), sep=";", index_col="datetime", parse_dates=True)
+        if "volume" not in df.columns:
+            df["volume"] = 0
         return df
 
     def get(self, symbol, time_frame, time_range):
