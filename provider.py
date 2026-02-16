@@ -37,7 +37,6 @@ class AlphaVantage(DataProvider):
 
     def _normalize(self, res) -> pd.DataFrame:
         df = pd.read_csv(StringIO(res.text), index_col="timestamp", parse_dates=True)
-        df = self._normalize(df)
         df = df.sort_index()
         df["volume"] = 0
         return df
@@ -72,7 +71,6 @@ class Massive(DataProvider):
 
     def _normalize(self, aggs):
         df = pd.DataFrame(aggs)
-
         df.index = pd.to_datetime(df["timestamp"], unit="ms")
         df.drop(["vwap", "timestamp", "transactions", "otc"], axis=1, inplace=True)
         return df
