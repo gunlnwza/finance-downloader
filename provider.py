@@ -148,9 +148,16 @@ class TwelveData(DataProvider):
 
         # TODO: Or I could just pass in date instead? Twelve Data support it!
 
+        unit = {
+            Timeframe.MINUTE: "min",
+            Timeframe.HOUR: "h",
+            Timeframe.DAY: "day",
+            Timeframe.WEEK: "week",
+            Timeframe.MONTH: "month", 
+        }[tf.unit]
         params = {
             "symbol":f"{s.base}/{s.quote}",  # must have / in-between
-            "interval":f"{tf.length}{tf.unit}",
+            "interval":f"{tf.length}{unit}",
             "outputsize": outputsize,  
             "format": "CSV",
             "apikey": self.api_key
@@ -167,14 +174,3 @@ class TwelveData(DataProvider):
             df["volume"] = 0
         df.index.name = "time"
         return df
-
-
-###############################################################################
-
-if __name__ == "__main__":
-    # tf = Timeframe(5, 'minute')
-    # print(tf)
-    # symbol = ForexSymbol("EUR", "USD")
-    # print(symbol)
-    provider = AlphaVantage(None)
-    # provider
