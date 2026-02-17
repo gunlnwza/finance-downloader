@@ -1,6 +1,8 @@
+from io import StringIO
+from abc import ABC, abstractmethod
+
 import pandas as pd
 import requests
-from io import StringIO
 from polygon import RESTClient
 
 
@@ -16,23 +18,25 @@ time_frame: str (TradingView convention)
 - 1w (week)
 - 1m (month)
 
-time_range: tuple of two datetimes
+time_range: tuple of two times
 (2026-02-15, 2026-02-16)
 """
 
-class DataProvider:
-    REQUIRED_INDEX_NAME = "datetime"
+class DataProvider(ABC):
+    REQUIRED_INDEX_NAME = "time"
     REQUIRED_COLUMNS = ["open", "high", "low", "close", "volume"]
 
     def __init__(self, api_key):
         self.api_key = api_key    
 
+    @abstractmethod
     def get(self, symbol: tuple, time_frame: str, time_range: tuple) -> pd.DataFrame:
         raise NotImplementedError
     
+    @abstractmethod
     def _normalize(self, df: pd.DataFrame) -> pd.DataFrame:
         raise NotImplementedError
-    
+
     def _validate(self, df):
         if df.index.name != self.REQUIRED_INDEX_NAME \
             or not all(col in df.columns for col in self.REQUIRED_COLUMNS):
@@ -48,7 +52,7 @@ class AlphaVantage(DataProvider):
         df = pd.read_csv(StringIO(res.text), index_col="timestamp", parse_dates=True)
         if "volume" not in df.columns:
             df["volume"] = 0
-        df.index.name = "datetime"
+        df.index.name = "time"
         df = df.sort_index()
         return df
 
@@ -86,7 +90,7 @@ class Massive(DataProvider):
         if "volume" not in df.columns:
             df["volume"] = 0
         df.index = pd.to_datetime(df["timestamp"], unit="ms")
-        df.index.name = "datetime"
+        df.index.name = "time"
         df.drop(["vwap", "timestamp", "transactions", "otc"], axis=1, inplace=True)
         return df
 
@@ -111,7 +115,7 @@ class TwelveData(DataProvider):
         super().__init__(api_key)
 
     def _normalize(self, res):
-        df = pd.read_csv(StringIO(res.text), sep=";", index_col="datetime", parse_dates=True)
+        df = pd.read_csv(StringIO(res.text), sep=";", index_col="time", parse_dates=True)
         if "volume" not in df.columns:
             df["volume"] = 0
         return df
