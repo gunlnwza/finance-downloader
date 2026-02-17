@@ -22,9 +22,22 @@ time_range: tuple of two times
 (2026-02-15, 2026-02-16)
 """
 
-class Symbol:
-    def __init__(self):
-        pass
+class ForexSymbol:
+    def __init__(self, base: str, quote: str):
+        self.base = base.upper()
+        self.quote = quote.upper()
+    
+        self._validate()  # assert that base and quote are correct
+
+    def __repr__(self):
+        return f"ForexSymbol({self.base}, {self.quote})"
+
+    def _validate(self):
+        if not (len(self.base) == 3 and len(self.quote) == 3):
+            raise ValueError(f"Invalid ForexSymbol: {self}")
+
+        # TODO: match against dict of currencies
+
 
 class Timeframe:
     """
