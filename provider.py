@@ -1,5 +1,6 @@
 from io import StringIO
 from abc import ABC, abstractmethod
+import logging
 
 import pandas as pd
 import requests
@@ -25,6 +26,7 @@ class DataProvider(ABC):
         """
         if time_start is not None:
             time_start = pd.Timestamp(time_start)
+        logging.info(f"Calling {self.name} API")
         raw = self._get_data_by_api(symbol, tf, time_start)
         df = self._normalize(raw)
         return self._validate(df)
@@ -49,6 +51,10 @@ class AlphaVantage(DataProvider):
         super().__init__("alpha_vantage", api_key)
 
     def _get_data_by_api(self, s: ForexSymbol, tf: Timeframe, time_start: pd.Timestamp | None):
+        if time_start is None:
+            pass
+        time_start = pd.Timestamp.now() - pd.Timedelta(days=42)  # TODO
+
         time_end = pd.Timestamp.now()
         DIFF_DAYS_TO_DOWNLOAD_FULL = 90
         if time_end - time_start >= pd.Timedelta(days=DIFF_DAYS_TO_DOWNLOAD_FULL):
@@ -95,6 +101,9 @@ class Massive(DataProvider):
     def _get_data_by_api(self, s: ForexSymbol, tf: Timeframe, time_start: pd.Timestamp | None):
         client = RESTClient(self.api_key)
 
+        if time_start is None:
+            pass  # TODO
+        time_start = pd.Timestamp.now() - pd.Timedelta(days=42)
         time_end = pd.Timestamp.now()
 
         aggs = list(client.list_aggs(
@@ -129,7 +138,15 @@ class TwelveData(DataProvider):
         time_end = pd.Timestamp.now()
 
         # 1 <= outputsize <= 5000, default is 30
-        outputsize = time_end - time_start
+        outputsize = 30
+        if time_start is None:  # TODO:
+            # outputsize = 5000
+            pass
+        else:
+            # outputsize = time_end - time_start
+            pass
+
+        # TODO: Or I could just pass in date instead? Twelve Data support it!
 
         params = {
             "symbol":f"{s.base}/{s.quote}",  # must have / in-between
@@ -145,9 +162,10 @@ class TwelveData(DataProvider):
         return res
 
     def _normalize(self, res):
-        df = pd.read_csv(StringIO(res.text), sep=";", index_col="time", parse_dates=True)
+        df = pd.read_csv(StringIO(res.text), sep=";", index_col="datetime", parse_dates=True)
         if "volume" not in df.columns:
             df["volume"] = 0
+        df.index.name = "time"
         return df
 
 

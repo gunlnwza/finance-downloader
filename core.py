@@ -1,4 +1,3 @@
-
 class ForexSymbol:
     def __init__(self, base: str, quote: str):
         self.base = base.upper()
@@ -8,6 +7,9 @@ class ForexSymbol:
 
     def __repr__(self):
         return f"ForexSymbol({self.base}, {self.quote})"
+
+    def __str__(self):
+        return f"{self.base}{self.quote}"
 
     def _validate(self):
         if not (len(self.base) == 3 and len(self.quote) == 3):
