@@ -5,111 +5,32 @@ import pandas as pd
 import requests
 from polygon import RESTClient
 
-
-"""
-symbol: tuple of two strings
-(EUR, USD)
-(XAU, USD)
-
-time_frame: str (TradingView convention)
-- 1, 5, 15, 30, 60 (minutes)
-- 1h, 4h (hours)
-- 1d (day)
-- 1w (week)
-- 1m (month)
-
-time_range: tuple of two times
-(2026-02-15, 2026-02-16)
-"""
-
-class ForexSymbol:
-    def __init__(self, base: str, quote: str):
-        self.base = base.upper()
-        self.quote = quote.upper()
-    
-        self._validate()  # assert that base and quote are correct
-
-    def __repr__(self):
-        return f"ForexSymbol({self.base}, {self.quote})"
-
-    def _validate(self):
-        if not (len(self.base) == 3 and len(self.quote) == 3):
-            raise ValueError(f"Invalid ForexSymbol: {self}")
-
-        # TODO: match against dict of currencies
-
-
-class Timeframe:
-    """
-    Supported timeframes:
-    - 1m, 5m, 15m, 30m
-    - 1h, 4h
-    - 1d
-    - 1w
-    - 1M
-    """
-    SECOND = "second"
-    MINUTE = "minute"
-    HOUR = "hour"
-    DAY = "day"
-    WEEK = "week"
-    MONTH = "month"
-
-    def __init__(self, length: int, unit: str | None = None):
-        self.length = length
-        self.unit = self._match_unit(unit)
-        self._validate()
-    
-    def __repr__(self):
-        return f"Timeframe({self.length}, {self.unit})"
-
-    def _match_unit(self, unit: str):
-        if unit in (
-            Timeframe.SECOND, Timeframe.MINUTE, Timeframe.HOUR,
-            Timeframe.DAY, Timeframe.WEEK, Timeframe.MONTH
-        ):
-            return unit
-
-        if not (len(unit) == 1 and unit[0] in "smhdwM"):
-            raise ValueError("Cannot map shorthand to unit")
-        return {
-            's': Timeframe.SECOND,
-            'm': Timeframe.MINUTE,
-            'h': Timeframe.HOUR,
-            'd': Timeframe.DAY,
-            'w': Timeframe.WEEK,
-            'M': Timeframe.MONTH
-        }[unit[0]]
-
-    def _validate(self):
-        if not (
-            (self.unit == Timeframe.MINUTE and self.length in (1, 5, 15, 30))
-            or (self.unit == Timeframe.HOUR and self.length in (1, 4))
-            or (self.unit == Timeframe.DAY and self.length in (1,))
-            or (self.unit == Timeframe.WEEK and self.length in (1,))
-            or (self.unit == Timeframe.MONTH and self.length in (1,))
-        ):
-            raise ValueError(f"Timeframe not supported: '{self}'")
-        
-        if not isinstance(self.length, int):
-            raise ValueError(f"Invalid Timeframe length: '{self}'")
+from core import ForexSymbol, Timeframe
 
 
 class DataProvider(ABC):
     REQUIRED_INDEX_NAME = "time"
     REQUIRED_COLUMNS = ["open", "high", "low", "close", "volume"]
 
-    def __init__(self, api_key):
-        self.api_key = api_key    
+    def __init__(self, name: str, api_key: str):
+        self.name = name
+        self.api_key = api_key
 
-    def get(self, symbol: Symbol, tf: Timeframe) -> pd.DataFrame:
-        """Get the oldest data `DataProvider` can find"""
-        raw = self._get_data_by_api(symbol, tf)
+    def get(self, symbol: ForexSymbol, tf: Timeframe, time_start: str | None = None) -> pd.DataFrame:
+        """
+        if `time_start` is `None`:
+            get the oldest data `DataProvider` can find
+        else:
+            get data from `time_start` onward
+        """
+        if time_start is not None:
+            time_start = pd.Timestamp(time_start)
+        raw = self._get_data_by_api(symbol, tf, time_start)
         df = self._normalize(raw)
         return self._validate(df)
 
     @abstractmethod
-    def _get_data_by_api(self, symbol: Symbol, tf: Timeframe):
+    def _get_data_by_api(self, s: ForexSymbol, tf: Timeframe, time_start: pd.Timestamp | None):
         pass
 
     @abstractmethod
@@ -125,28 +46,28 @@ class DataProvider(ABC):
 
 class AlphaVantage(DataProvider):
     def __init__(self, api_key):
-        super().__init__(api_key)
+        super().__init__("alpha_vantage", api_key)
 
-    def _normalize(self, res) -> pd.DataFrame:
-        df = pd.read_csv(StringIO(res.text), index_col="timestamp", parse_dates=True)
-        if "volume" not in df.columns:
-            df["volume"] = 0
-        df.index.name = "time"
-        df = df.sort_index()
-        return df
-
-    def get(self, symbol, time_frame, time_range):
-        base, quote = symbol
-        function_ = "FX_DAILY"  # TODO: convert from time_frame
-        outputsize = "compact"  # TODO: convert from time_range
+    def _get_data_by_api(self, s: ForexSymbol, tf: Timeframe, time_start: pd.Timestamp | None):
+        time_end = pd.Timestamp.now()
+        DIFF_DAYS_TO_DOWNLOAD_FULL = 90
+        if time_end - time_start >= pd.Timedelta(days=DIFF_DAYS_TO_DOWNLOAD_FULL):
+            outputsize = "full"
+        else:
+            outputsize = "compact"
+        
+        functions = {Timeframe.DAY: 'FX_DAILY', Timeframe.WEEK: 'FX_WEEKLY', Timeframe.MONTH: 'FX_MONTHLY'}
+        if tf.unit not in functions:
+            raise ValueError("AlphaVantage: unsupported Timeframe")
+        function_ = functions[tf.unit]
 
         params = {
-            "apikey": self.api_key,
-            "from_symbol": base,
-            "to_symbol": quote,
+            "from_symbol": s.base,
+            "to_symbol": s.quote,
+            "outputsize": outputsize,
             "function": function_,
             "datatype": "csv",
-            "outputsize": outputsize
+            "apikey": self.api_key
         }
         res = requests.get("https://www.alphavantage.co/query", params, timeout=10)
         if not res.ok:
@@ -156,13 +77,39 @@ class AlphaVantage(DataProvider):
         if content_type and "json" in content_type.lower():
             raise ValueError(f"AlphaVantage: {res.json()}")
 
-        df = self._normalize(res)
-        return self._validate(df)
+        return res
+    
+    def _normalize(self, res) -> pd.DataFrame:
+        df = pd.read_csv(StringIO(res.text), index_col="timestamp", parse_dates=True)
+        if "volume" not in df.columns:
+            df["volume"] = 0
+        df.index.name = "time"
+        df = df.sort_index()
+        return df
 
 
 class Massive(DataProvider):
     def __init__(self, api_key):
-        super().__init__(api_key)
+        super().__init__("massive", api_key)
+    
+    def _get_data_by_api(self, s: ForexSymbol, tf: Timeframe, time_start: pd.Timestamp | None):
+        client = RESTClient(self.api_key)
+
+        time_end = pd.Timestamp.now()
+
+        aggs = list(client.list_aggs(
+            f"C:{s.base}{s.quote}",
+            tf.length,
+            tf.unit,
+            time_start,
+            time_end,
+            adjusted="true",
+            sort="asc"
+        ))
+        if not aggs:
+            raise ValueError("Massive: data not downloaded")
+
+        return aggs
 
     def _normalize(self, aggs):
         df = pd.DataFrame(aggs)
@@ -173,25 +120,29 @@ class Massive(DataProvider):
         df.drop(["vwap", "timestamp", "transactions", "otc"], axis=1, inplace=True)
         return df
 
-    def get(self, symbol, time_frame, time_range):
-        tf_amount, tf_unit = 1, "day"  # TODO: convert from time_frame
-        base, quote = symbol
-        start, end = time_range
-        client = RESTClient(self.api_key)
-
-        aggs = list(client.list_aggs(
-            f"C:{base}{quote}", tf_amount, tf_unit, start, end, adjusted="true", sort="asc"
-        ))
-        if not aggs:
-            raise ValueError("Massive: data not downloaded")
-        
-        df = self._normalize(aggs)
-        return self._validate(df)
-
 
 class TwelveData(DataProvider):
     def __init__(self, api_key):
-        super().__init__(api_key)
+        super().__init__("twelve_data", api_key)
+
+    def _get_data_by_api(self, s: ForexSymbol, tf: Timeframe, time_start: pd.Timestamp | None):
+        time_end = pd.Timestamp.now()
+
+        # 1 <= outputsize <= 5000, default is 30
+        outputsize = time_end - time_start
+
+        params = {
+            "symbol":f"{s.base}/{s.quote}",  # must have / in-between
+            "interval":f"{tf.length}{tf.unit}",
+            "outputsize": outputsize,  
+            "format": "CSV",
+            "apikey": self.api_key
+        }
+        res = requests.get("https://api.twelvedata.com/time_series", params, timeout=10)
+        if not res.ok:
+            raise ValueError("TwelveData: data not downloaded")
+
+        return res
 
     def _normalize(self, res):
         df = pd.read_csv(StringIO(res.text), sep=";", index_col="time", parse_dates=True)
@@ -199,24 +150,13 @@ class TwelveData(DataProvider):
             df["volume"] = 0
         return df
 
-    def get(self, symbol, time_frame, time_range):
-        base, quote = symbol
 
-        params = {
-            "symbol":f"{base}/{quote}",  # must have / !
-            "interval":"1min",
-            "outputsize": 30,  # default is 30, support [1, 5000], TODO: convert time_range & time_frame
-            "format": "CSV",
-            "apikey":self.api_key
-        }
-        res = requests.get("https://api.twelvedata.com/time_series", params, timeout=10)
-        if not res.ok:
-            raise ValueError("TwelveData: data not downloaded")
-
-        df = self._normalize(res)
-        return self._validate(df)
-
+###############################################################################
 
 if __name__ == "__main__":
-    tf = Timeframe(5, 'minute')
-    print(tf)
+    # tf = Timeframe(5, 'minute')
+    # print(tf)
+    # symbol = ForexSymbol("EUR", "USD")
+    # print(symbol)
+    provider = AlphaVantage(None)
+    # provider
