@@ -105,17 +105,21 @@ class Downloader:
         if filepath.exists():
             existing = pd.read_csv(filepath, index_col="time")
             existing.index = pd.to_datetime(existing.index, utc=True)
+            old_len = len(existing)
+
+            logger.debug(f"\n\n{data.tail()}\n")
 
             # Concatenate and remove duplicate timestamps (keep latest)
             combined = pd.concat([existing, data])
             combined = combined[~combined.index.duplicated(keep="last")]
             combined = combined.sort_index()
         else:
+            old_len = 0
             combined = data.sort_index()
 
         validate_data(combined)
         combined.to_csv(filepath)
-        logger.info(f"Save '{self._get_filename(s, tf)}'")
+        logger.info(f"Save '{self._get_filename(s, tf)}' ({len(combined) - old_len} bars added)")
 
 
 class RetriesDownloader(Downloader):
