@@ -162,6 +162,16 @@ class ForexSymbol:
         'XAG': 'Silver',
     }
 
+    MAJOR_PAIRS = [
+        ("EUR", "USD"),
+        ("GBP", "USD"),
+        ("USD", "JPY"),
+        ("USD", "CHF"),
+        ("AUD", "USD"),
+        ("NZD", "USD"),
+        ("USD", "CAD"),
+    ]
+
     __slots__ = ("base", "quote")
 
     def __init__(self, base: str, quote: str):
@@ -201,7 +211,7 @@ class Timeframe:
     - 1w
     - 1M
     """
-    SECOND = "second"
+    SECOND = "sec"
     MINUTE = "min"
     HOUR = "hour"
     DAY = "day"
@@ -229,3 +239,6 @@ class Timeframe:
     
     def __repr__(self):
         return f"Timeframe({self.length}, {self.unit})"
+
+    def __str__(self):
+        return f"{self.length}{self.unit}"

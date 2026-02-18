@@ -1,61 +1,26 @@
-import argparse
-import os
 import sys
+import argparse
 import logging
-import time
 
 from dotenv import load_dotenv
-import requests
-import urllib3
 
-from provider import AlphaVantage, Massive, TwelveData, ForexSymbol, Timeframe
-from downloader import Downloader
-
-
-def multiple_retries_download(downloader: Downloader, s: ForexSymbol, tf: Timeframe):
-    MAX_RETRIES = 5
-    BASE_SLEEP = 5
-    MAX_SLEEP = 60
-    
-    retries = 0
-    sleep_time = BASE_SLEEP
-
-    while retries < MAX_RETRIES:
-        try:
-            downloader.download(s, tf)
-            break  # success → exit retry loop
-
-        except (
-            ValueError,
-            requests.exceptions.ConnectionError,
-            urllib3.exceptions.MaxRetryError
-        ) as e:  # TODO: revise error handling
-            if "limit" in str(e).lower():
-                logging.error(f"Got rate limited by {downloader.provider}")
-                sys.exit(1)
-
-            retries += 1
-            logging.warning(
-                f"{base}/{quote} failed (attempt {retries}/{MAX_RETRIES}): {e}"
-            )
-
-            if retries >= MAX_RETRIES:
-                logging.error(f"{base}/{quote} permanently failed.")
-                break
-
-            time.sleep(min(sleep_time, MAX_SLEEP))
-            sleep_time *= 2  # exponential backoff
+from finloader.core import ForexSymbol, Timeframe
+from finloader.provider import DataProvider
+from finloader.downloader import RetriesDownloader
 
 
-if __name__ == "__main__":
+def main():
     load_dotenv()
+
     logging.basicConfig(
         filename='app.log',
         filemode='a',
         level=logging.DEBUG,
-        format='%(asctime)s %(levelname)-8s: %(message)s',
+        format='%(asctime)s | %(levelname)-8s | %(message)s',
         datefmt='%m/%d/%Y %I:%M:%S'
     )
+    logging.info("")
+    logging.info(f"python3 {' '.join(sys.argv)}")
 
     parser = argparse.ArgumentParser()
     parser.add_argument("provider")
@@ -66,35 +31,24 @@ if __name__ == "__main__":
     parser.add_argument("--tf_unit", required=True)
     args = parser.parse_args()
 
-    logging.info("Downloading data...")
-
-    if args.provider == "alpha_vantage":
-        provider = AlphaVantage(os.getenv("ALPHA_VANTAGE_API_KEY"))
-    elif args.provider == "massive":
-        provider = Massive(os.getenv("MASSIVE_API_KEY"))
-    elif args.provider == "twelve_data":
-        provider = TwelveData(os.getenv("TWELVE_DATA_API_KEY"))
-    else:
-        raise ValueError(f"Unsupported provider: {args.provider}")
-
-    downloader = Downloader(provider)
+    provider = DataProvider.from_name(args.provider)
+    downloader = RetriesDownloader(provider)
     tf = Timeframe(args.tf_length, args.tf_unit)
 
-    if args.major:
-        major_pairs = [
-            ("EUR", "USD"),
-            ("GBP", "USD"),
-            ("USD", "JPY"),
-            ("USD", "CHF"),
-            ("AUD", "USD"),
-            ("NZD", "USD"),
-            ("USD", "CAD"),
-        ]
-        for base, quote in major_pairs:
-            s = ForexSymbol(base, quote)
-            multiple_retries_download(downloader, s, tf)
-    else:
-        if args.quote is None:
-            raise ValueError("Quote currency must be provided unless using 'major'")
-        s = ForexSymbol(args.base, args.quote)
-        multiple_retries_download(downloader, s, tf)
+    try:
+        if args.major:
+            for base, quote in ForexSymbol.MAJOR_PAIRS:
+                s = ForexSymbol(base, quote)
+                downloader.download(s, tf)
+        else:
+            if args.quote is None:
+                raise ValueError("Quote currency must be provided unless using 'major'")
+            s = ForexSymbol(args.base, args.quote)
+            downloader.download(s, tf)
+    except ConnectionError as e:
+        logging.error("Not connected to the internet")
+        sys.exit(e)
+
+
+if __name__ == "__main__":
+    main()
