@@ -196,8 +196,8 @@ class TwelveData(DataProvider):
         return res
 
     def _normalize(self, res):
-        logging.debug("TwelveData._normalize() | res.text")
-        logging.debug(f"\n{res.text}")
+        # logging.debug("TwelveData._normalize() | res.text")
+        # logging.debug(f"\n{res.text}")
         df = pd.read_csv(
             StringIO(res.text),
             sep=";",
@@ -209,6 +209,6 @@ class TwelveData(DataProvider):
         df.index.name = "time"
         df.index = pd.to_datetime(df.index, utc=True)
         df = df.sort_index(ascending=True)
-        logging.debug("TwelveData._normalize() | df")
-        logging.debug(f"\n{df}")
+        # logging.debug("TwelveData._normalize() | df")
+        # logging.debug(f"\n{df}")
         return df
