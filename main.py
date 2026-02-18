@@ -29,11 +29,11 @@ def setup_logging():
 
     # Silence noisy third-party libraries
     noisy_libs = [
-        "urllib3",
-        "urllib3.connectionpool",
-        "requests",
-        "chardet",
-        "charset_normalizer",
+        # "urllib3",
+        # "urllib3.connectionpool",
+        # "requests",
+        # "chardet",
+        # "charset_normalizer",
     ]
     for lib in noisy_libs:
         logging.getLogger(lib).setLevel(logging.ERROR)
@@ -58,13 +58,15 @@ def main():
     logger.info(f"python3 {' '.join(sys.argv)}")
 
     provider = DataProvider.from_name(args.provider)
-    downloader = RetriesDownloader(provider)
     s = ForexSymbol(args.base, args.quote)
     tf = Timeframe(args.tf_length, args.tf_unit)
     try:
+        downloader = RetriesDownloader(provider)
         downloader.download(s, tf)
     except ConnectionError as e:
         logger.error(e)
+        sys.exit(e)
+    except KeyboardInterrupt as e:
         sys.exit(e)
 
 

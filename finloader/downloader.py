@@ -2,7 +2,7 @@ from pathlib import Path
 import logging
 import time
 
-import requests
+import socket
 import pandas as pd
 
 from .core import ForexSymbol, Timeframe
@@ -41,7 +41,7 @@ class Downloader:
         return self._symbol_dir(s) / self._get_filename(s, tf)
 
     ###########################################################################
-    # time_start calculation funcs
+    # time-related funcs
     ###########################################################################
 
     def _last_time_in_file(self, filepath: Path):
@@ -60,19 +60,19 @@ class Downloader:
         logger.debug(f"requested time_start_utc = {time_start_utc}")
         return time_start_utc
     
-    ###########################################################################
-    # Main funcs
-    ###########################################################################
-
     def _is_data_stale(self, data_latest_utc: pd.Timestamp, tf: Timeframe):
         now = pd.Timestamp.now(tz="UTC")
         if not tf.is_intraday:
             now = now.normalize()  # zero out the time if (day, week, month)
 
         time_diff = now - data_latest_utc
-        logger.debug(f"diff: {time_diff}, rhs: {tf.timedelta}")
+        logger.debug(f"lhs (time diff): {time_diff}, rhs (tf.timedelta): {tf.timedelta}")
 
         return time_diff > tf.timedelta
+    
+    ###########################################################################
+    # Main funcs
+    ###########################################################################
 
     def download(self, s: ForexSymbol, tf: Timeframe, **kwargs):
         """
@@ -81,21 +81,10 @@ class Downloader:
         - Download everything if file does not exist.
         - Download only from latest data if file exists.
         """
-
         data_latest_utc = self._get_data_latest_utc(s, tf)
-
-        # see if download is necessary
         if not self._is_data_stale(data_latest_utc, tf):
             logger.info(f"'{self._get_filename(s, tf)}' is up to date")
             return
-            
-
-        # DataProvider's assumption: there is a connection ; must respect the assumption
-        logger.debug("Checking internet connection...") 
-        try:
-            requests.get("https://google.com", timeout=3)
-        except requests.exceptions.ConnectionError:
-            raise ConnectionError("Not connected to the internet")
 
         data = self._get_data(s, tf, data_latest_utc, **kwargs)
         self._save(data, s, tf)
@@ -156,7 +145,7 @@ class RetriesDownloader(Downloader):
                 if retries >= max_retries:
                     logger.error(f"{s} permanently failed")
                     return None  # failure
-                logger.warning(f"trying again in {sleep_time}")
+                logger.warning(f"trying again in {sleep_time}s")
                 time.sleep(sleep_time)
                 sleep_time = min(sleep_time * 2, max_sleep)  # exponential backoff
 

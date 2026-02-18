@@ -102,7 +102,11 @@ class AlphaVantage(DataProvider):
             "datatype": "csv",
             "apikey": self.api_key
         }
-        res = requests.get("https://www.alphavantage.co/query", params, timeout=10)
+        try:
+            res = requests.get("https://www.alphavantage.co/query", params, timeout=10)
+        except requests.exceptions.ConnectionError as e:
+            raise ConnectionError("Not connected to the internet")
+
         if not res.ok:
             raise ValueError("AlphaVantage: data not downloaded")
 
@@ -156,12 +160,15 @@ class Massive(DataProvider):
                 adjusted="true",
                 sort="asc"
             ))
-        except urllib3.exceptions.MaxRetryError:
-            raise TemporaryRateLimit("Massive: temporary rate limited")
+        except urllib3.exceptions.MaxRetryError as e:
+            root = e.__cause__ or e
+            if isinstance(root, urllib3.exceptions.NameResolutionError):
+                raise ConnectionError("Not connected to the internet")
+            else:
+                raise TemporaryRateLimit("Massive: temporary rate limited")
 
         if not aggs:
             raise ValueError("Massive: data not downloaded")
-
         return aggs
 
     def _normalize(self, aggs):
@@ -203,11 +210,15 @@ class TwelveData(DataProvider):
             "format": "CSV",
             "apikey": self.api_key
         }
-        res = requests.get("https://api.twelvedata.com/time_series", params, timeout=10)
+        try:
+            res = requests.get("https://api.twelvedata.com/time_series", params, timeout=10)
+        except requests.exceptions.ConnectionError as e:
+            raise ConnectionError("Not connected to the internet")
+
         if not res.ok:
             raise ValueError("TwelveData: data not downloaded")
 
-        logger.debug(f"\nres.text[:300]\n{res.text[:300]}")
+        # logger.debug(f"\nres.text[:300]\n{res.text[:300]}")
 
         content_type = res.headers.get("Content-Type", "")
         if "json" in content_type.lower():
