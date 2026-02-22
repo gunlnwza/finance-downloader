@@ -12,6 +12,8 @@ logger = logging.getLogger(__name__)
 
 
 class AlphaVantage(DataProvider):
+    DIFF_DAYS_TO_DOWNLOAD_FULL = 90
+
     def __init__(self, api_key):
         super().__init__("alpha_vantage", api_key)
 
@@ -25,16 +27,10 @@ class AlphaVantage(DataProvider):
             raise ValueError("AlphaVantage: unsupported Timeframe")
         return functions[tf.unit]
 
-    def _get_api_outputsize(self, time_start_utc: pd.Timestamp) -> str:
-        DIFF_DAYS_TO_DOWNLOAD_FULL = 90
-
-        time_end_utc = pd.Timestamp.now(tz="UTC")
-        if time_end_utc - time_start_utc >= pd.Timedelta(days=DIFF_DAYS_TO_DOWNLOAD_FULL):
-            outputsize = "full"
-        else:
-            outputsize = "compact"
-        logger.debug(f"using outputsize={outputsize}")
-        return outputsize
+    def _get_api_outputsize(self, utc_start: pd.Timestamp) -> str:
+        time_diff = pd.Timestamp.now(tz="UTC") - utc_start
+        timedelta = pd.Timedelta(days=AlphaVantage.DIFF_DAYS_TO_DOWNLOAD_FULL)
+        return "full" if time_diff >= timedelta else "compact"
 
     def _call_api(self, s: ForexSymbol, tf: Timeframe, time_start_utc: pd.Timestamp):
         params = {

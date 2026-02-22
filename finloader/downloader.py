@@ -48,9 +48,13 @@ class SymbolFile:
             now = now.normalize()  # zero out the time part
 
         time_diff = now - self.latest_utc()
-        logger.debug(f"lhs (time diff): {time_diff}")
-        logger.debug(f"rhs (tf.timedelta): {self.tf.timedelta}")
-        logger.debug(f"{self} {'need update' if time_diff >= self.tf.timedelta else 'is current :)'}")
+        logger.debug(
+            "%s need_update=%s (time_diff=%s, tf=%s)",
+            self,
+            time_diff >= self.tf.timedelta,
+            time_diff,
+            self.tf.timedelta,
+        )
         return time_diff >= self.tf.timedelta
 
 
@@ -77,7 +81,6 @@ class Downloader:
         """
         symbol_file = SymbolFile(self.provider_dir, symbol, tf)
         if symbol_file.need_update():
-            # raise ValueError("stop")
             data = self.provider.get(symbol, tf, symbol_file.latest_utc())
             self._save(data, symbol_file)
         else:
@@ -98,8 +101,6 @@ class Downloader:
 
     def _append_data(self, data: pd.DataFrame, symbol_file: SymbolFile):
         # TODO: optimize later with stream-based method
-
-        logger.debug(f"data.tail()={data.tail()}")
 
         # Load the old file
         existing = pd.read_csv(symbol_file.path, index_col="time")
