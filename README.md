@@ -11,7 +11,7 @@ Pulls OHLCV data from multiple providers, and stores it locally for research and
 -	Handles incremental updates
 -	Retries on temporary failures
 -	Logs errors cleanly
--	Saves to CSV (Parquet soon)
+-	Saves to Parquet
 
 Designed to be run by cron.
 

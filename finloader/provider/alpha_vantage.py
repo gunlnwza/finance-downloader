@@ -38,7 +38,7 @@ class AlphaVantage(DataProvider):
             "to_symbol": s.quote,
             "function": self._get_api_function(tf),
             "outputsize": self._get_api_outputsize(time_start_utc),
-            "datatype": "csv",
+            "datatype": "csv",  # API data sending format, DO NOT EDIT
             "apikey": self.api_key
         }
         logger.debug(f"using outputsize={params['outputsize']}")
@@ -66,7 +66,7 @@ class AlphaVantage(DataProvider):
         return res
     
     def _normalize(self, res) -> pd.DataFrame:
-        df = pd.read_csv(StringIO(res.text), index_col="timestamp")
+        df = pd.read_csv(StringIO(res.text), index_col="timestamp")  # converting AlphaVantage CSV into df, DO NOT EDIT
         df.index = pd.to_datetime(df.index, utc=True)
         df.index.name = "time"
         if "volume" not in df.columns:

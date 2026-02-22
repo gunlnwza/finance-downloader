@@ -5,7 +5,7 @@ import pandas as pd
 
 from .core import ForexSymbol, Timeframe
 from .provider import DataProvider
-from .schema import validate_data
+from .schema import validate_data, FILE_EXTENSION
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +21,7 @@ class SymbolFile:
         self.dir = self.provider_dir / str(s)
         self.dir.mkdir(parents=True, exist_ok=True)
 
-        self.name = f"{self.provider_dir.name}_{self.symbol}_{self.tf}.csv"
+        self.name = f"{self.provider_dir.name}_{self.symbol}_{self.tf}.{FILE_EXTENSION}"
 
         self.path = self.dir / self.name
 
@@ -35,12 +35,15 @@ class SymbolFile:
         return self.path.exists()
 
     def latest_utc(self):
-        if self.path.exists():
-            df = pd.read_csv(self.path, index_col="time")
-            df.index = pd.to_datetime(df.index, utc=True)
-            return df.index[-1]
-        else:
+        if not self.path.exists():
             return SymbolFile.DEFAULT_TIME_START
+
+        df = pd.read_parquet(self.path)
+        if df.empty:
+            return SymbolFile.DEFAULT_TIME_START
+
+        # index is already persisted in parquet; assume it is sorted
+        return df.index.max()
 
     def need_update(self):
         now = pd.Timestamp.now(tz="UTC")
@@ -85,10 +88,9 @@ class Downloader:
             return
         
         data = self.provider.get(symbol, tf, symbol_file.latest_utc())
-        if not data:
+        if data is None:
             logger.warning(f"'{symbol_file}' is not updated")
             return
-
         self._save(data, symbol_file)
 
     def _save(self, data: pd.DataFrame, symbol_file: SymbolFile):
@@ -101,15 +103,14 @@ class Downloader:
             old_len, appended = 0, data
         validate_data(appended)
 
-        appended.to_csv(symbol_file.path)
+        appended.to_parquet(symbol_file.path)
         logger.info(f"Save '{symbol_file}' ({len(appended) - old_len} bars added)")
 
     def _append_data(self, data: pd.DataFrame, symbol_file: SymbolFile):
         # TODO: optimize later with stream-based method
 
         # Load the old file
-        existing = pd.read_csv(symbol_file.path, index_col="time")
-        existing.index = pd.to_datetime(existing.index, utc=True)
+        existing = pd.read_parquet(symbol_file.path)
         old_len = len(existing)
 
         # Concatenate and remove duplicate timestamps (keep latest)

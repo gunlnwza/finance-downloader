@@ -37,7 +37,7 @@ class TwelveData(DataProvider):
             "interval": self._get_api_interval(tf),
             "start_date": self._get_api_start_date(time_start_utc),
             "timezone": "UTC",
-            "format": "CSV",
+            "format": "CSV",  # API data sending format, DO NOT EDIT
             "apikey": self.api_key
         }
         try:
@@ -65,7 +65,7 @@ class TwelveData(DataProvider):
         if res is None:
             df = pd.DataFrame(columns=["open", "high", "low", "close", "volume"])
         else:
-            df = pd.read_csv(
+            df = pd.read_csv(  # converting Twelve Data CSV, DO NOT EDIT
                 StringIO(res.text),
                 sep=";",
                 index_col="datetime",

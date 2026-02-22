@@ -5,6 +5,7 @@
 data
 backup*
 *.csv
+*.parquet
 
 # Logs
 logs

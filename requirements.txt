@@ -2,6 +2,7 @@ dotenv
 rich
 
 pandas
+pyarrow
 
 requests
 polygon-api-client

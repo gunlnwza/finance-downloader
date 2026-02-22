@@ -1,5 +1,6 @@
-import logging
 import pandas as pd
+
+FILE_EXTENSION = "parquet"
 
 REQUIRED_INDEX_NAME = "time"
 REQUIRED_COLUMNS = ["open", "high", "low", "close", "volume"]
