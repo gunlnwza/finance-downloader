@@ -77,25 +77,26 @@ def parse_inputs():
 
 
 def main():
+    load_dotenv()
+
+    args = parse_inputs()
+    setup_logging(level=logging.DEBUG if args.debug else logging.INFO)
+    logger.info(f"$ python3 {' '.join(sys.argv)}")
+
     try:
-        load_dotenv()
-
-        args = parse_inputs()
-        setup_logging(level=logging.DEBUG if args.debug else logging.INFO)
-        logger.info(f"$ python3 {' '.join(sys.argv)}")
-
         provider = DataProvider.from_name(args.provider)
         s = ForexSymbol(args.base, args.quote)
         tf = Timeframe(args.tf_length, args.tf_unit)
 
         downloader = Downloader(provider)
         downloader.download(s, tf)
-    except KeyboardInterrupt as e:
+    except KeyboardInterrupt:
         pass
-    except (ValueError, ConnectionError) as e:
+    except ValueError as e:
         logger.error(e)
-    except Exception as e:
-        logger.critical(f"Unhandled error: {e}")
+    except Exception:
+        logger.exception("Unhandled error")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

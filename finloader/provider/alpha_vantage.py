@@ -24,7 +24,7 @@ class AlphaVantage(DataProvider):
             Timeframe.MONTH: 'FX_MONTHLY'
         }
         if tf.unit not in functions:
-            raise ValueError("AlphaVantage: unsupported Timeframe")
+            raise ValueError(f"AlphaVantage: timeframe '{tf}' is not supported by free API")
         return functions[tf.unit]
 
     def _get_api_outputsize(self, utc_start: pd.Timestamp) -> str:
@@ -41,6 +41,7 @@ class AlphaVantage(DataProvider):
             "datatype": "csv",
             "apikey": self.api_key
         }
+        logger.debug(f"using outputsize={params['outputsize']}")
         try:
             res = requests.get("https://www.alphavantage.co/query", params, timeout=10)
         except requests.exceptions.ConnectionError as e:
@@ -52,9 +53,15 @@ class AlphaVantage(DataProvider):
         content_type = str(res.headers.get("Content-Type", ""))
         if "json" in content_type.lower():
             data = res.json()
-            if "Information" in data:
-                raise TemporaryRateLimit("AlphaVantage: temporary rate limited")
-            raise ValueError(f"AlphaVantage: {data}")
+            if "Error Message" in data:
+                raise ValueError(f"AlphaVantage: {data['Error Message']}")
+            elif "Information" in data:
+                if "our standard API rate limit is 25 requests per day" in data["Information"]:
+                    raise DailyRateLimit("AlphaVantage: daily rate-limited")
+                else:
+                    raise TemporaryRateLimit("AlphaVantage: temporary rate-limited")
+            else:
+                raise ValueError(f"AlphaVantage: {data}")
 
         return res
     

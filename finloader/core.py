@@ -246,9 +246,9 @@ class Timeframe:
             raise ValueError(f"Cannot convert unit to Timedelta: {self.unit}")
 
         if self.unit == Timeframe.MONTH:
-            return pd.DateOffset(months=self.length)
-
-        return pd.Timedelta(self.length, unit=self._UNIT_TO_PANDAS[self.unit])
+            return pd.Timedelta(days=31)  # months got irregular days, use 31 days for all months
+        else:
+            return pd.Timedelta(self.length, unit=self._UNIT_TO_PANDAS[self.unit])
 
     @property
     def is_intraday(self) -> bool:

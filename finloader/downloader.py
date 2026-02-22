@@ -80,11 +80,16 @@ class Downloader:
         - Download only from latest data if file exists.
         """
         symbol_file = SymbolFile(self.provider_dir, symbol, tf)
-        if symbol_file.need_update():
-            data = self.provider.get(symbol, tf, symbol_file.latest_utc())
-            self._save(data, symbol_file)
-        else:
+        if not symbol_file.need_update():
             logger.info(f"'{symbol_file}' is up to date")
+            return
+        
+        data = self.provider.get(symbol, tf, symbol_file.latest_utc())
+        if not data:
+            logger.warning(f"'{symbol_file}' is not updated")
+            return
+
+        self._save(data, symbol_file)
 
     def _save(self, data: pd.DataFrame, symbol_file: SymbolFile):
         validate_data(data)

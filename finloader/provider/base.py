@@ -44,7 +44,10 @@ class DataProvider(ABC):
             raise ValueError("Must pass UTC timestamp")
 
         logger.info(f"Calling {self.name} API for: {s} ({tf})")
-        raw = self._call_api_with_retries(s, tf, utc_start)
+        raw = self._call_api_with_retries(s, tf, utc_start)  # handle rate-limits
+        if raw is None:
+            logger.warning(f"'{s}' ({tf}) was not downloaded")
+            return None
 
         df = self._normalize(raw)
         validate_data(df)
@@ -62,24 +65,22 @@ class DataProvider(ABC):
             try:
                 data = self._call_api(s, tf, utc_start)
                 return data  # success
-
             except TemporaryRateLimit as e:
                 retries += 1
                 logger.warning(f"{s} failed (attempt {retries}/{max_retries}): {e}")
                 if retries >= max_retries:
                     logger.error(f"{s} permanently failed")
-                    return None  # failure
+                    break
 
                 logger.warning(f"trying again in {sleep_time}s")
                 time.sleep(sleep_time)
 
                 sleep_time = min(sleep_time * 2, max_sleep)  # exponential backoff
-
             except DailyRateLimit as e:
-                logger.error(f"{self.name}: daily rate limited")
-                return None  # failure
+                logger.warning(f"{self.name}: daily rate-limited")
+                break
 
-        return None
+        return None  # failure
 
     @abstractmethod
     def _call_api(self, s: ForexSymbol, tf: Timeframe, time_start_utc: pd.Timestamp):
