@@ -30,7 +30,7 @@ def setup_logging(log_path: str = "logs/finloader.log", level=logging.INFO):
     rich_handler = RichHandler(
         show_time=True,
         show_level=True,
-        show_path=True,
+        show_path=False,
         rich_tracebacks=True,
         markup=False,
     )
