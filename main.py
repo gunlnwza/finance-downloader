@@ -1,33 +1,59 @@
 import sys
 import argparse
 import logging
+from logging.handlers import RotatingFileHandler
+from rich.logging import RichHandler
 from pathlib import Path
 
 from dotenv import load_dotenv
 
 from finloader.core import ForexSymbol, Timeframe
 from finloader.provider import DataProvider
-from finloader.downloader import RetriesDownloader
+from finloader.downloader import Downloader
 
 logger = logging.getLogger("finloader.cli")
-logger.setLevel(logging.DEBUG)
 
 
-def setup_logging():
-    LOG_DIR = Path("logs")
-    LOG_DIR.mkdir(exist_ok=True)
-    
-    log_filepath = LOG_DIR / "finloader.log"
+def setup_logging(log_path: str = "logs/finloader.log", level=logging.INFO):
+    Path(log_path).parent.mkdir(parents=True, exist_ok=True)
 
-    logging.basicConfig(
-        filename=log_filepath,
-        filemode='a',
-        level=logging.INFO,
-        format='%(asctime)s | %(levelname)s | %(name)s | %(message)s',
-        datefmt='%m-%d-%Y %H:%M:%S'
+    root = logging.getLogger()
+
+    # Prevent duplicate logs if setup_logging() is called more than once
+    if root.handlers:
+        for h in list(root.handlers):
+            root.removeHandler(h)
+
+    root.setLevel(level)
+
+    # Terminal (Rich)
+    rich_handler = RichHandler(
+        show_time=True,
+        show_level=True,
+        show_path=False,   # set True if you want file:line
+        rich_tracebacks=True,
+        markup=False,
+    )
+    rich_handler.setLevel(level)
+    root.addHandler(rich_handler)
+
+    # Rotating file
+    file_fmt = logging.Formatter(
+        "%(asctime)s %(levelname)s %(name)s: %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
     )
 
-    # Silence noisy third-party libraries
+    fh = RotatingFileHandler(
+        log_path,
+        maxBytes=1000_000,
+        backupCount=1,
+        encoding="utf-8",
+    )
+    fh.setLevel(level)
+    fh.setFormatter(file_fmt)
+    root.addHandler(fh)
+
+    # Silence third-party libraries
     noisy_libs = [
         # "urllib3",
         # "urllib3.connectionpool",
@@ -46,29 +72,30 @@ def parse_inputs():
     parser.add_argument("quote")
     parser.add_argument("tf_length", type=int)
     parser.add_argument("tf_unit")
+    parser.add_argument("-d", "--debug", action="store_true")
     return parser.parse_args()
 
 
 def main():
     load_dotenv()
-    setup_logging()
 
     args = parse_inputs()
-    logger.info("")
-    logger.info(f"python3 {' '.join(sys.argv)}")
+    setup_logging(level=logging.DEBUG if args.debug else logging.INFO)
+
+    logger.info(f"$ python3 {' '.join(sys.argv)}")
 
     provider = DataProvider.from_name(args.provider)
     s = ForexSymbol(args.base, args.quote)
     tf = Timeframe(args.tf_length, args.tf_unit)
     try:
-        downloader = RetriesDownloader(provider)
+        downloader = Downloader(provider)
         downloader.download(s, tf)
     except ConnectionError as e:
         logger.error(e)
         sys.exit(e)
     except KeyboardInterrupt as e:
         sys.exit(e)
-    except e:
+    except Exception as e:
         logger.critical(f"Unhandled error: {e}")
         sys.exit(e)
 

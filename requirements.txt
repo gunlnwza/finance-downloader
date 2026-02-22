@@ -1,6 +1,7 @@
-pandas
-
 dotenv
+rich
+
+pandas
 
 requests
 polygon-api-client

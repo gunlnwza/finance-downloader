@@ -1,21 +1,18 @@
 from pathlib import Path
 import logging
-import time
 
-import socket
 import pandas as pd
 
 from .core import ForexSymbol, Timeframe
 from .provider import DataProvider
-from .exceptions import TemporaryRateLimit, DailyRateLimit
 from .schema import validate_data
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
 
 
 class Downloader:
     _data_dir = Path(__file__).parent.parent / "data"
+    DEFAULT_TIME_START = pd.Timestamp("2000-01-01", tz="UTC")
 
     def __init__(self, provider: DataProvider):
         self.provider = provider
@@ -50,15 +47,13 @@ class Downloader:
         return df.index[-1]
 
     def _get_data_latest_utc(self, s: ForexSymbol, tf: Timeframe):
-        DEFAULT_TIME_START = pd.Timestamp("2000-01-01", tz="UTC")
-
         filepath = self._get_filepath(s, tf)
         if not filepath.exists():
-            return DEFAULT_TIME_START
+            return Downloader.DEFAULT_TIME_START
 
-        time_start_utc = self._last_time_in_file(filepath)
-        logger.debug(f"requested time_start_utc = {time_start_utc}")
-        return time_start_utc
+        utc_start = self._last_time_in_file(filepath)
+        logger.debug(f"requested utc_start = {utc_start}")
+        return utc_start
     
     def _is_data_stale(self, data_latest_utc: pd.Timestamp, tf: Timeframe):
         now = pd.Timestamp.now(tz="UTC")
@@ -74,7 +69,7 @@ class Downloader:
     # Main funcs
     ###########################################################################
 
-    def download(self, s: ForexSymbol, tf: Timeframe, **kwargs):
+    def download(self, s: ForexSymbol, tf: Timeframe):
         """
         Orchestrate downloading process:
         - Download all the (`s`, `tf`)'s data its `DataProvider` can get.
@@ -86,41 +81,8 @@ class Downloader:
             logger.info(f"'{self._get_filename(s, tf)}' is up to date")
             return
 
-        data = self._get_data(s, tf, data_latest_utc, **kwargs)
+        data = self.provider.get(s, tf, data_latest_utc)
         self._save(data, s, tf)
-
-    def _get_data(self,
-                  s: ForexSymbol,
-                  tf: Timeframe,
-                  time_start: pd.Timestamp,
-                  *,
-                  max_retries=5,
-                  base_sleep=20,
-                  max_sleep=60
-                ) -> pd.DataFrame:
-        retries = 0
-        sleep_time = base_sleep
-
-        while retries < max_retries:
-            try:
-                data = self.provider.get(s, tf, time_start)
-                return data  # success
-
-            except TemporaryRateLimit as e:
-                retries += 1
-                logger.warning(f"{s} failed (attempt {retries}/{max_retries}): {e}")
-                if retries >= max_retries:
-                    logger.error(f"{s} permanently failed")
-                    return None  # failure
-                logger.warning(f"trying again in {sleep_time}s")
-                time.sleep(sleep_time)
-                sleep_time = min(sleep_time * 2, max_sleep)  # exponential backoff
-
-            except DailyRateLimit as e:
-                logger.error(f"{self.provider}, daily rate limited")
-                return None  # failure
-
-        return None
 
     def _save(self, data: pd.DataFrame, s: ForexSymbol, tf: Timeframe):
         validate_data(data)

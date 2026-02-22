@@ -1,9 +1,6 @@
 import logging
 import pandas as pd
 
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
-
 REQUIRED_INDEX_NAME = "time"
 REQUIRED_COLUMNS = ["open", "high", "low", "close", "volume"]
 
