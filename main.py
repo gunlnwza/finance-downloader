@@ -30,7 +30,7 @@ def setup_logging(log_path: str = "logs/finloader.log", level=logging.INFO):
     rich_handler = RichHandler(
         show_time=True,
         show_level=True,
-        show_path=False,   # set True if you want file:line
+        show_path=True,
         rich_tracebacks=True,
         markup=False,
     )
@@ -55,11 +55,11 @@ def setup_logging(log_path: str = "logs/finloader.log", level=logging.INFO):
 
     # Silence third-party libraries
     noisy_libs = [
-        # "urllib3",
-        # "urllib3.connectionpool",
-        # "requests",
-        # "chardet",
-        # "charset_normalizer",
+        "urllib3",
+        "urllib3.connectionpool",
+        "requests",
+        "chardet",
+        "charset_normalizer",
     ]
     for lib in noisy_libs:
         logging.getLogger(lib).setLevel(logging.ERROR)
@@ -77,27 +77,25 @@ def parse_inputs():
 
 
 def main():
-    load_dotenv()
-
-    args = parse_inputs()
-    setup_logging(level=logging.DEBUG if args.debug else logging.INFO)
-
-    logger.info(f"$ python3 {' '.join(sys.argv)}")
-
-    provider = DataProvider.from_name(args.provider)
-    s = ForexSymbol(args.base, args.quote)
-    tf = Timeframe(args.tf_length, args.tf_unit)
     try:
+        load_dotenv()
+
+        args = parse_inputs()
+        setup_logging(level=logging.DEBUG if args.debug else logging.INFO)
+        logger.info(f"$ python3 {' '.join(sys.argv)}")
+
+        provider = DataProvider.from_name(args.provider)
+        s = ForexSymbol(args.base, args.quote)
+        tf = Timeframe(args.tf_length, args.tf_unit)
+
         downloader = Downloader(provider)
         downloader.download(s, tf)
-    except ConnectionError as e:
-        logger.error(e)
-        sys.exit(e)
     except KeyboardInterrupt as e:
-        sys.exit(e)
+        pass
+    except (ValueError, ConnectionError) as e:
+        logger.error(e)
     except Exception as e:
         logger.critical(f"Unhandled error: {e}")
-        sys.exit(e)
 
 
 if __name__ == "__main__":

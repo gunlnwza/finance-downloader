@@ -10,101 +10,105 @@ from .schema import validate_data
 logger = logging.getLogger(__name__)
 
 
-class Downloader:
-    _data_dir = Path(__file__).parent.parent / "data"
-    DEFAULT_TIME_START = pd.Timestamp("2000-01-01", tz="UTC")
+class SymbolFile:
+    DEFAULT_TIME_START = pd.Timestamp("2000-01-01", tz="UTC")  # in the case of empty file
 
-    def __init__(self, provider: DataProvider):
+    def __init__(self, provider_dir: Path, s: ForexSymbol, tf: Timeframe):
+        self.provider_dir = provider_dir
+        self.symbol = s
+        self.tf = tf
+
+        self.dir = self.provider_dir / str(s)
+        self.dir.mkdir(parents=True, exist_ok=True)
+
+        self.name = f"{self.provider_dir.name}_{self.symbol}_{self.tf}.csv"
+
+        self.path = self.dir / self.name
+
+    def __str__(self):
+        return self.name
+
+    def __repr__(self):
+        return f"SymbolFile({self.provider_dir.name}, {self.symbol}, {self.tf})"
+
+    def exists(self):
+        return self.path.exists()
+
+    def latest_utc(self):
+        if self.path.exists():
+            df = pd.read_csv(self.path, index_col="time")
+            df.index = pd.to_datetime(df.index, utc=True)
+            return df.index[-1]
+        else:
+            return SymbolFile.DEFAULT_TIME_START
+
+    def need_update(self):
+        now = pd.Timestamp.now(tz="UTC")
+        if self.tf in (Timeframe.DAY, Timeframe.WEEK, Timeframe.MONTH):
+            now = now.normalize()  # zero out the time part
+
+        time_diff = now - self.latest_utc()
+        logger.debug(f"lhs (time diff): {time_diff}")
+        logger.debug(f"rhs (tf.timedelta): {self.tf.timedelta}")
+        logger.debug(f"{self} {'need update' if time_diff >= self.tf.timedelta else 'is current :)'}")
+        return time_diff >= self.tf.timedelta
+
+
+class Downloader:
+    def __init__(self, provider: DataProvider, data_dir: Path | None = None):
         self.provider = provider
 
-        Downloader._data_dir.mkdir(exist_ok=True)
+        if data_dir is None:
+            project_root = Path(__file__).resolve().parents[1]
+            data_dir = project_root / "data"
 
-        self._provider_dir = Downloader._data_dir / self.provider.name
-        self._provider_dir.mkdir(exist_ok=True)
+        self.data_dir = data_dir
+        self.data_dir.mkdir(parents=True, exist_ok=True)
 
-    ###########################################################################
-    # Files helpers
-    ###########################################################################
+        self.provider_dir = self.data_dir / self.provider.name
+        self.provider_dir.mkdir(parents=True, exist_ok=True)
 
-    def _symbol_dir(self, s: ForexSymbol):
-        dir = self._provider_dir / str(s)
-        dir.mkdir(exist_ok=True)
-        return dir
-
-    def _get_filename(self, s: ForexSymbol, tf: Timeframe):
-        return f"{self.provider.name}_{s.base}{s.quote}_{tf.length}{tf.unit}.csv"
-
-    def _get_filepath(self, s: ForexSymbol, tf: Timeframe):
-        return self._symbol_dir(s) / self._get_filename(s, tf)
-
-    ###########################################################################
-    # time-related funcs
-    ###########################################################################
-
-    def _last_time_in_file(self, filepath: Path):
-        df = pd.read_csv(filepath, index_col="time")
-        df.index = pd.to_datetime(df.index, utc=True)
-        return df.index[-1]
-
-    def _get_data_latest_utc(self, s: ForexSymbol, tf: Timeframe):
-        filepath = self._get_filepath(s, tf)
-        if not filepath.exists():
-            return Downloader.DEFAULT_TIME_START
-
-        utc_start = self._last_time_in_file(filepath)
-        logger.debug(f"requested utc_start = {utc_start}")
-        return utc_start
-    
-    def _is_data_stale(self, data_latest_utc: pd.Timestamp, tf: Timeframe):
-        now = pd.Timestamp.now(tz="UTC")
-        if not tf.is_intraday:
-            now = now.normalize()  # zero out the time if (day, week, month)
-
-        time_diff = now - data_latest_utc
-        logger.debug(f"lhs (time diff): {time_diff}, rhs (tf.timedelta): {tf.timedelta}")
-
-        return time_diff > tf.timedelta
-    
-    ###########################################################################
-    # Main funcs
-    ###########################################################################
-
-    def download(self, s: ForexSymbol, tf: Timeframe):
+    def download(self, symbol: ForexSymbol, tf: Timeframe):
         """
         Orchestrate downloading process:
         - Download all the (`s`, `tf`)'s data its `DataProvider` can get.
         - Download everything if file does not exist.
         - Download only from latest data if file exists.
         """
-        data_latest_utc = self._get_data_latest_utc(s, tf)
-        if not self._is_data_stale(data_latest_utc, tf):
-            logger.info(f"'{self._get_filename(s, tf)}' is up to date")
-            return
-
-        data = self.provider.get(s, tf, data_latest_utc)
-        self._save(data, s, tf)
-
-    def _save(self, data: pd.DataFrame, s: ForexSymbol, tf: Timeframe):
-        validate_data(data)
-
-        if len(data) == 0:
-            logger.info(f"'{self._get_filename(s, tf)}' is up to date")
-            return
-
-        filepath = self._get_filepath(s, tf)
-        if filepath.exists():
-            existing = pd.read_csv(filepath, index_col="time")
-            existing.index = pd.to_datetime(existing.index, utc=True)
-            old_len = len(existing)
-
-            # Concatenate and remove duplicate timestamps (keep latest)
-            combined = pd.concat([existing, data])
-            combined = combined[~combined.index.duplicated(keep="last")]
-            combined = combined.sort_index()
+        symbol_file = SymbolFile(self.provider_dir, symbol, tf)
+        if symbol_file.need_update():
+            # raise ValueError("stop")
+            data = self.provider.get(symbol, tf, symbol_file.latest_utc())
+            self._save(data, symbol_file)
         else:
-            old_len = 0
-            combined = data.sort_index()
+            logger.info(f"'{symbol_file}' is up to date")
 
-        validate_data(combined)
-        combined.to_csv(filepath)
-        logger.info(f"Save '{self._get_filename(s, tf)}' ({len(combined) - old_len} bars added)")
+    def _save(self, data: pd.DataFrame, symbol_file: SymbolFile):
+        validate_data(data)
+        if symbol_file.exists():
+            logger.info(f"Appending to '{symbol_file}'")
+            old_len, appended = self._append_data(data, symbol_file)
+        else:
+            logger.info(f"Create new file '{symbol_file}'")
+            old_len, appended = 0, data
+        validate_data(appended)
+
+        appended.to_csv(symbol_file.path)
+        logger.info(f"Save '{symbol_file}' ({len(appended) - old_len} bars added)")
+
+    def _append_data(self, data: pd.DataFrame, symbol_file: SymbolFile):
+        # TODO: optimize later with stream-based method
+
+        logger.debug(f"data.tail()={data.tail()}")
+
+        # Load the old file
+        existing = pd.read_csv(symbol_file.path, index_col="time")
+        existing.index = pd.to_datetime(existing.index, utc=True)
+        old_len = len(existing)
+
+        # Concatenate and remove duplicate timestamps (keep latest)
+        new = pd.concat([existing, data])
+        new = new[~new.index.duplicated(keep="last")]
+        new = new.sort_index()
+
+        return old_len, new
