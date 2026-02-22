@@ -43,7 +43,7 @@ class DataProvider(ABC):
         if str(utc_start.tz) != "UTC":
             raise ValueError("Must pass UTC timestamp")
 
-        logger.info(f"Calling {self.name} API for: {s} ({tf})")
+        logger.info(f"Calling {self.name} API for: '{s}' ({tf})")
         raw = self._call_api_with_retries(s, tf, utc_start)  # handle rate-limits
         if raw is None:
             logger.warning(f"'{s}' ({tf}) was not downloaded")
@@ -55,7 +55,7 @@ class DataProvider(ABC):
     
     def _call_api_with_retries(
             self, s: ForexSymbol, tf: Timeframe, utc_start: pd.Timestamp, *,
-            max_retries=5, base_sleep=20, max_sleep=60
+            max_retries=5, base_sleep=15, time_multiplier=2, max_sleep=60
         ) -> pd.DataFrame:
 
         retries = 0
@@ -65,17 +65,17 @@ class DataProvider(ABC):
             try:
                 data = self._call_api(s, tf, utc_start)
                 return data  # success
+
             except TemporaryRateLimit as e:
                 retries += 1
-                logger.warning(f"{s} failed (attempt {retries}/{max_retries}): {e}")
                 if retries >= max_retries:
-                    logger.error(f"{s} permanently failed")
+                    logger.error(f"{s} failed (attempt {retries}/{max_retries}) | permanently failed")
                     break
+                else:
+                    logger.warning(f"{s} failed (attempt {retries}/{max_retries}) | trying again in {sleep_time}s")
+                    time.sleep(sleep_time)
+                    sleep_time = min(sleep_time * time_multiplier, max_sleep)
 
-                logger.warning(f"trying again in {sleep_time}s")
-                time.sleep(sleep_time)
-
-                sleep_time = min(sleep_time * 2, max_sleep)  # exponential backoff
             except DailyRateLimit as e:
                 logger.warning(f"{self.name}: daily rate-limited")
                 break

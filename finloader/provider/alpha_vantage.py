@@ -58,7 +58,7 @@ class AlphaVantage(DataProvider):
             elif "Information" in data:
                 if "our standard API rate limit is 25 requests per day" in data["Information"]:
                     raise DailyRateLimit("AlphaVantage: daily rate-limited")
-                else:
+                else:  # Please consider spreading out your free API requests more sparingly
                     raise TemporaryRateLimit("AlphaVantage: temporary rate-limited")
             else:
                 raise ValueError(f"AlphaVantage: {data}")
