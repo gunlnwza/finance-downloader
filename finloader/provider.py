@@ -226,6 +226,8 @@ class TwelveData(DataProvider):
                     return None
                 case 429:  # rate limited
                     raise TemporaryRateLimit("TwelveData: temporary rate limited")
+                case _:
+                    raise ValueError("Twelve data: unhandled error code")
 
         return res
 

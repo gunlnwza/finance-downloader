@@ -89,41 +89,6 @@ class Downloader:
         data = self._get_data(s, tf, data_latest_utc, **kwargs)
         self._save(data, s, tf)
 
-    def _get_data(self, s: ForexSymbol, tf: Timeframe, time_start_utc: pd.Timestamp) -> pd.DataFrame:
-        """Sub-class must implement _get_data()"""
-        data = self.provider.get(s, tf, time_start_utc)
-        return data
-
-    def _save(self, data: pd.DataFrame, s: ForexSymbol, tf: Timeframe):
-        validate_data(data)
-
-        if len(data) == 0:
-            logger.info(f"'{self._get_filename(s, tf)}' is up to date")
-            return
-
-        filepath = self._get_filepath(s, tf)
-        if filepath.exists():
-            existing = pd.read_csv(filepath, index_col="time")
-            existing.index = pd.to_datetime(existing.index, utc=True)
-            old_len = len(existing)
-
-            # Concatenate and remove duplicate timestamps (keep latest)
-            combined = pd.concat([existing, data])
-            combined = combined[~combined.index.duplicated(keep="last")]
-            combined = combined.sort_index()
-        else:
-            old_len = 0
-            combined = data.sort_index()
-
-        validate_data(combined)
-        combined.to_csv(filepath)
-        logger.info(f"Save '{self._get_filename(s, tf)}' ({len(combined) - old_len} bars added)")
-
-
-class RetriesDownloader(Downloader):
-    def __init__(self, provider):
-        super().__init__(provider)
-
     def _get_data(self,
                   s: ForexSymbol,
                   tf: Timeframe,
@@ -156,3 +121,28 @@ class RetriesDownloader(Downloader):
                 return None  # failure
 
         return None
+
+    def _save(self, data: pd.DataFrame, s: ForexSymbol, tf: Timeframe):
+        validate_data(data)
+
+        if len(data) == 0:
+            logger.info(f"'{self._get_filename(s, tf)}' is up to date")
+            return
+
+        filepath = self._get_filepath(s, tf)
+        if filepath.exists():
+            existing = pd.read_csv(filepath, index_col="time")
+            existing.index = pd.to_datetime(existing.index, utc=True)
+            old_len = len(existing)
+
+            # Concatenate and remove duplicate timestamps (keep latest)
+            combined = pd.concat([existing, data])
+            combined = combined[~combined.index.duplicated(keep="last")]
+            combined = combined.sort_index()
+        else:
+            old_len = 0
+            combined = data.sort_index()
+
+        validate_data(combined)
+        combined.to_csv(filepath)
+        logger.info(f"Save '{self._get_filename(s, tf)}' ({len(combined) - old_len} bars added)")
