@@ -18,11 +18,8 @@ class SymbolFile:
         self.symbol = s
         self.tf = tf
 
-        self.dir = self.provider_dir / str(s)
-        self.dir.mkdir(parents=True, exist_ok=True)
-
         self.name = f"{self.provider_dir.name}_{self.symbol}_{self.tf}.{FILE_EXTENSION}"
-
+        self.dir = self.provider_dir / str(self.symbol)  # only created when really need to save
         self.path = self.dir / self.name
 
     def __str__(self):
@@ -59,6 +56,10 @@ class SymbolFile:
             self.tf.timedelta,
         )
         return time_diff >= self.tf.timedelta
+    
+    def save(self, data: pd.DataFrame):
+        self.dir.mkdir(parents=True, exist_ok=True)
+        data.to_parquet(self.path)
 
 
 class Downloader:
@@ -69,10 +70,7 @@ class Downloader:
             project_root = Path(__file__).resolve().parents[1]
             data_dir = project_root / "data"
 
-        self.data_dir = data_dir
-        self.data_dir.mkdir(parents=True, exist_ok=True)
-
-        self.provider_dir = self.data_dir / self.provider.name
+        self.provider_dir = data_dir / self.provider.name
         self.provider_dir.mkdir(parents=True, exist_ok=True)
 
     def download(self, symbol: ForexSymbol, tf: Timeframe):
@@ -103,7 +101,7 @@ class Downloader:
             old_len, appended = 0, data
         validate_data(appended)
 
-        appended.to_parquet(symbol_file.path)
+        symbol_file.save(appended)
         logger.info(f"Save '{symbol_file}' ({len(appended) - old_len} bars added)")
 
     def _append_data(self, data: pd.DataFrame, symbol_file: SymbolFile):
