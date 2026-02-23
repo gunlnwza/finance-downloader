@@ -47,8 +47,8 @@ class SymbolFile:
 
     def need_update(self):
         now = pd.Timestamp.now(tz="UTC")
-        if self.tf in (Timeframe.DAY, Timeframe.WEEK, Timeframe.MONTH):
-            now = now.normalize()  # zero out the time part
+        if self.tf.unit in (Timeframe.DAY, Timeframe.WEEK, Timeframe.MONTH):
+            now = now.normalize()  # zero out the time part if unit >= day
 
         time_diff = now - self.latest_utc()
         logger.debug(

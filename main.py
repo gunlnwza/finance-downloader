@@ -24,7 +24,8 @@ def setup_logging(log_path: str = "logs/finloader.log", level=logging.INFO):
         for h in list(root.handlers):
             root.removeHandler(h)
 
-    root.setLevel(level)
+    # Always allow DEBUG at root so handlers can filter independently
+    root.setLevel(logging.DEBUG)
 
     # Terminal (Rich)
     rich_handler = RichHandler(
@@ -49,7 +50,7 @@ def setup_logging(log_path: str = "logs/finloader.log", level=logging.INFO):
         backupCount=1,
         encoding="utf-8",
     )
-    fh.setLevel(level)
+    fh.setLevel(logging.DEBUG)  # DEBUG for rotating file
     fh.setFormatter(file_fmt)
     root.addHandler(fh)
 
