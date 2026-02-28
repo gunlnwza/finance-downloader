@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "finloader"
+version = "0.1.0"
+description = "CLI to download forex data"
+authors = [{ name = "Gun" }]
+requires-python = ">=3.11"
+
+[project.scripts]
+finloader = "finloader.cli:main"
+
+[tool.setuptools]
+packages = ["finloader"]

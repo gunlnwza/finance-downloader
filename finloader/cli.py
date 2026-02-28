@@ -66,6 +66,12 @@ def setup_logging(log_path: str = "logs/finloader.log", level=logging.INFO):
         logging.getLogger(lib).setLevel(logging.ERROR)
 
 
+def log_invocation():
+    cmd = Path(sys.argv[0]).name
+    args = " ".join(sys.argv[1:])
+    logger.info(f"$ {cmd} {args}")
+
+
 def parse_inputs():
     parser = argparse.ArgumentParser()
     parser.add_argument("provider")
@@ -78,11 +84,10 @@ def parse_inputs():
 
 
 def main():
-    load_dotenv()
-
     args = parse_inputs()
     setup_logging(level=logging.DEBUG if args.debug else logging.INFO)
-    logger.info(f"$ python3 {' '.join(sys.argv)}")
+    log_invocation()
+    load_dotenv()
 
     try:
         provider = DataProvider.from_name(args.provider)
