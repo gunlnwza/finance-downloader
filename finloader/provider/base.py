@@ -13,9 +13,14 @@ logger = logging.getLogger(__name__)
 
 
 class DataProvider(ABC):
-    def __init__(self, name: str, api_key: str):
+    def __init__(self, name: str, api_key: str, *, max_retries=5, base_sleep=10, max_sleep=60):
         self.name = name
         self.api_key = api_key
+
+        # Control multiple retries behavior
+        self.max_retries = max_retries
+        self.base_sleep = base_sleep
+        self.max_sleep = max_sleep
 
     @classmethod
     def from_name(cls, name: str):
@@ -53,28 +58,24 @@ class DataProvider(ABC):
         validate_data(df)
         return df
     
-    def _call_api_with_retries(
-            self, s: ForexSymbol, tf: Timeframe, utc_start: pd.Timestamp, *,
-            max_retries=5, base_sleep=15, time_multiplier=2, max_sleep=60
-        ) -> pd.DataFrame:
-
+    def _call_api_with_retries(self, s: ForexSymbol, tf: Timeframe, utc_start: pd.Timestamp) -> pd.DataFrame:
         retries = 0
-        sleep_time = base_sleep
+        sleep_time = self.base_sleep
 
-        while retries < max_retries:
+        while retries < self.max_retries:
             try:
                 data = self._call_api(s, tf, utc_start)
                 return data  # success
 
             except TemporaryRateLimit as e:
                 retries += 1
-                if retries >= max_retries:
-                    logger.error(f"{s} failed (attempt {retries}/{max_retries}) | permanently failed")
+                if retries >= self.max_retries:
+                    logger.error(f"{s} failed (attempt {retries}/{self.max_retries}) | permanently failed")
                     break
                 else:
-                    logger.warning(f"{s} failed (attempt {retries}/{max_retries}) | trying again in {sleep_time}s")
+                    logger.warning(f"{s} failed (attempt {retries}/{self.max_retries}) | trying again in {sleep_time}s")
                     time.sleep(sleep_time)
-                    sleep_time = min(sleep_time * time_multiplier, max_sleep)
+                    sleep_time = min(sleep_time * 2, self.max_sleep)
 
             except DailyRateLimit as e:
                 logger.warning(f"{self.name}: daily rate-limited")

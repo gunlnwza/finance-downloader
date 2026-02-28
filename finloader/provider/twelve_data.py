@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 class TwelveData(DataProvider):
     def __init__(self, api_key):
-        super().__init__("twelve_data", api_key)
+        super().__init__("twelve_data", api_key, base_sleep=60)
 
     def _get_api_symbol(self, s: ForexSymbol):
         return f"{s.base}/{s.quote}"  # must have '/' in-between

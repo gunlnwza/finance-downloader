@@ -15,7 +15,7 @@ class Massive(DataProvider):
     ALLOWED_TIMEFRAME_UNITS = (Timeframe.DAY, Timeframe.WEEK, Timeframe.MONTH)
 
     def __init__(self, api_key):
-        super().__init__("massive", api_key)
+        super().__init__("massive", api_key, base_sleep=60)
 
     @classmethod
     def _convert_timestamp(cls, ts: pd.Timestamp):
