@@ -1,4 +1,4 @@
-# fin-loader
+# finloader
 
 > Because downloading data incrementally should be clean and convenient.
 
